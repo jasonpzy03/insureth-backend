@@ -1,0 +1,59 @@
+openapi: 3.0.3
+info:
+  title: Insureth Auth API
+  description: Authentication and User management for Insureth
+  version: 1.0.0
+servers:
+  - url: http://localhost:8081
+    description: Local development server
+paths:
+  /cp-users/exists:
+    get:
+      summary: Check if a client user profile exists
+      description: Check if a client user profile exists
+      operationId: checkClientUserExists
+      parameters:
+        - name: walletAddress
+          in: query
+          required: true
+          description: The 42-character Ethereum wallet address (e.g., beginning with 0x).
+          schema:
+            type: string
+            example: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
+      responses:
+        "200":
+          description: Returns true if username exists
+          content:
+            application/json:
+              schema:
+                type: boolean
+  /cp-users/create:
+    post:
+      summary: Creates a new client user
+      description: Creates a new client user
+      operationId: createClientUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientUserModel'
+      responses:
+        "201":
+          description: User created successfully
+
+components:
+  schemas:
+    ClientUserModel:
+      type: object
+      properties:
+        walletAddress:
+          type: string
+          example: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
+        username:
+          type: string
+          example: "user01"
+        email:
+          type: string
+          example: "email@gmail.com"
+

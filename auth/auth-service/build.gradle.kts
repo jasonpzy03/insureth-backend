@@ -1,0 +1,6 @@
+dependencies {
+    implementation(project(":auth:auth-model"))
+    implementation(project(":auth:auth-domain"))
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter")
+}
