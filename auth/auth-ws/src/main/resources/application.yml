@@ -3,19 +3,43 @@ spring:
     name: auth
   
   datasource:
-    url: jdbc:postgresql://localhost:5433/insureth
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
     username: ${DB_USERNAME:postgres}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
     hibernate:
-      ddl-auto: none
+      ddl-auto: update
     properties:
       hibernate:
         format_sql: true
         naming:
           physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:VGhpcy1pcy1hLWRldi1vbmx5LWluc3VyZXRoLWJhY2tvZmZpY2Utand0LXNlY3JldC1rZXktMDE=}
+    expiration-ms: ${JWT_EXPIRATION_MS:43200000}
+
+auth:
+  siwe:
+    client-portal:
+      domain: ${CLIENT_PORTAL_SIWE_DOMAIN:localhost:4200}
+      uri: ${CLIENT_PORTAL_SIWE_URI:http://localhost:4200}
+      statement: ${CLIENT_PORTAL_SIWE_STATEMENT:Sign in to Insureth Client Portal}
+      chain-id: ${CLIENT_PORTAL_SIWE_CHAIN_ID:31337}
+    backoffice:
+      domain: ${BACKOFFICE_SIWE_DOMAIN:localhost:4300}
+      uri: ${BACKOFFICE_SIWE_URI:http://localhost:4300}
+      statement: ${BACKOFFICE_SIWE_STATEMENT:Sign in to Insureth Back Office}
+      chain-id: ${BACKOFFICE_SIWE_CHAIN_ID:31337}
+
+backoffice:
+  seed:
+    username: ${BACKOFFICE_SEED_USERNAME:admin}
+    email: ${BACKOFFICE_SEED_EMAIL:admin@insureth.local}
+    wallet-address: ${BACKOFFICE_SEED_WALLET_ADDRESS:0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266}
 
 logging:
   level:

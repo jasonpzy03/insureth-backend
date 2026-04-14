@@ -1,0 +1,206 @@
+openapi: 3.0.3
+info:
+  title: Insureth Flight Insurance API
+  description: Flight Insurance for Insureth
+  version: 1.0.0
+servers:
+  - url: http://localhost:8082
+    description: Local development server
+paths:
+  /airlines:
+    get:
+      tags:
+        - FlightInsurance
+      summary: Get all airlines
+      description: Get a list of all airlines containing their name and IATA code
+      operationId: getAirlines
+      responses:
+        "200":
+          description: Returns a list of airlines
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AirlineResponseModel'
+  /airports:
+    get:
+      tags:
+        - FlightInsurance
+      summary: Get all airports
+      description: Get a list of all airports containing their name and IATA code
+      operationId: getAirports
+      responses:
+        "200":
+          description: Returns a list of airports
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AirportResponseModel'
+  /flightfutureschedule:
+    get:
+      tags:
+        - FlightInsurance
+      summary: Get Flight Future Schedule by Flight IATA and Departure Time
+      description: Get Flight Future Schedule by Flight IATA and Departure Time
+      operationId: getFlightFutureSchedule
+      parameters:
+        - name: airlineIATACode
+          in: query
+          required: true
+          description: Airline IATA Code-Number
+          schema:
+            type: string
+        - name: flightNumber
+          in: query
+          required: true
+          description: Flight Number
+          schema:
+            type: string
+        - name: departureAirportIATACode
+          in: query
+          required: true
+          description: Departure Airport IATA Code-Number
+          schema:
+            type: string
+        - name: departureDate
+          in: query
+          required: true
+          description: Flight Departure Date
+          schema:
+            type: string
+            format: date
+            example: "2026-04-01"
+      responses:
+        "200":
+          description: Returns flight info based on flight IATA
+          content:
+            application/json:
+              schema:
+                  $ref: '#/components/schemas/FlightScheduleResponseModel'
+
+components:
+  schemas:
+    AviationStackFlightScheduleResponseModel:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AviationStackFlightScheduleDataModel'
+
+    AviationStackFlightScheduleDataModel:
+      type: object
+      properties:
+        weekday:
+          type: string
+          example: "1"
+          description: Day of week (0-6, where 0 is Sunday)
+        departure:
+          $ref: '#/components/schemas/AirportDetailModel'
+        arrival:
+          $ref: '#/components/schemas/AirportDetailModel'
+        airline:
+          $ref: '#/components/schemas/AirlineModel'
+        flight:
+          $ref: '#/components/schemas/FlightNumberModel'
+
+    AirportDetailModel:
+      type: object
+      properties:
+        iataCode:
+          type: string
+          example: "kul"
+          description: IATA airport code
+        icaoCode:
+          type: string
+          example: "wmkk"
+          description: ICAO airport code
+        terminal:
+          type: string
+          example: "2"
+          description: Terminal number (empty if not available)
+        gate:
+          type: string
+          example: "s"
+          description: Gate number (empty if not available)
+        scheduledTime:
+          type: string
+          example: "09:45"
+          description: Scheduled time in HH:mm format
+
+    AirlineModel:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "airasia"
+          description: Airline name
+        iataCode:
+          type: string
+          example: "ak"
+          description: IATA airline code
+        icaoCode:
+          type: string
+          example: "axm"
+          description: ICAO airline code
+
+    FlightNumberModel:
+      type: object
+      properties:
+        number:
+          type: string
+          example: "6042"
+          description: Flight number
+        iataNumber:
+          type: string
+          example: "ak6042"
+          description: IATA flight number (airline code + flight number)
+        icaoNumber:
+          type: string
+          example: "axm6042"
+          description: ICAO flight number (airline code + flight number)
+
+    FlightScheduleResponseModel:
+      type: object
+      properties:
+        flightIATA:
+          type: string
+        departureAirportIATA:
+          type: string
+        arrivalAirportIATA:
+          type: string
+        departureAirportName:
+          type: string
+        arrivalAirportName:
+          type: string
+        departureTime:
+          type: string
+        arrivalTime:
+          type: string
+
+    AirlineResponseModel:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "airasia"
+          description: Airline name
+        iataCode:
+          type: string
+          example: "ak"
+          description: IATA airline code
+
+    AirportResponseModel:
+      type: object
+      properties:
+        name:
+          type: string
+          example: "Kuala Lumpur International Airport"
+          description: Airport name
+        iataCode:
+          type: string
+          example: "KUL"
+          description: IATA airport code

@@ -5,6 +5,7 @@ import com.insureth.auth.service.ClientPortalUserService;
 import com.insureth.auth.ws.api.CpUsersApi;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AuthController implements CpUsersApi {
     private final ClientPortalUserService clientPortalUserService;
+    private final AuthenticationFacade authenticationFacade;
 
     @Override
     public ResponseEntity<Boolean> checkClientUserExists(String walletAddress) {
@@ -22,7 +24,22 @@ public class AuthController implements CpUsersApi {
 
     @Override
     public ResponseEntity<Void> createClientUser(ClientUserModel userModel) {
+        authenticationFacade.requireWalletMatch(userModel.getWalletAddress());
         clientPortalUserService.createUser(userModel);
+        return ResponseEntity.ok().build();
+    }
+
+    @Override
+    public ResponseEntity<ClientUserModel> getClientUser(String walletAddress) {
+        authenticationFacade.requireWalletMatch(walletAddress);
+        ClientUserModel user = clientPortalUserService.getUserByWalletAddress(walletAddress);
+        return ResponseEntity.ok(user);
+    }
+
+    @Override
+    public ResponseEntity<Void> updateClientUser(String walletAddress, ClientUserModel userModel) {
+        authenticationFacade.requireWalletMatch(walletAddress);
+        clientPortalUserService.updateUser(walletAddress, userModel);
         return ResponseEntity.ok().build();
     }
 }
