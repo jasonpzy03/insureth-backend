@@ -1,0 +1,11 @@
+openapi: 3.0.1
+info:
+  title: Notification Service API
+  version: 1.0.0
+paths:
+  /notifications/health:
+    get:
+      summary: Health check endpoint
+      responses:
+        "200":
+          description: OK

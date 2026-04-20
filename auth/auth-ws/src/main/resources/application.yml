@@ -1,7 +1,11 @@
 spring:
   application:
     name: auth
-  
+  artemis:
+    broker-url: tcp://${ACTIVEMQ_HOST:localhost}:61616
+    user: ${ACTIVEMQ_USER:admin}
+    password: ${ACTIVEMQ_PASSWORD:admin}
+    
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
     username: ${DB_USERNAME:postgres}
@@ -17,10 +21,14 @@ spring:
         naming:
           physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
 
+app:
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:4200}
+
 security:
   jwt:
     secret: ${JWT_SECRET:VGhpcy1pcy1hLWRldi1vbmx5LWluc3VyZXRoLWJhY2tvZmZpY2Utand0LXNlY3JldC1rZXktMDE=}
-    expiration-ms: ${JWT_EXPIRATION_MS:43200000}
+    expiration-ms: ${JWT_EXPIRATION_MS:1800000}
 
 auth:
   siwe:
@@ -35,18 +43,16 @@ auth:
       statement: ${BACKOFFICE_SIWE_STATEMENT:Sign in to Insureth Back Office}
       chain-id: ${BACKOFFICE_SIWE_CHAIN_ID:31337}
 
-backoffice:
-  seed:
-    username: ${BACKOFFICE_SEED_USERNAME:admin}
-    email: ${BACKOFFICE_SEED_EMAIL:admin@insureth.local}
-    wallet-address: ${BACKOFFICE_SEED_WALLET_ADDRESS:0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266}
-
 logging:
   level:
     org:
       springframework:
         web: DEBUG
         security: DEBUG
+
+internal:
+  api:
+    key: ${INTERNAL_API_KEY:insureth-internal-dev-key}
 
 server:
   port: 8081

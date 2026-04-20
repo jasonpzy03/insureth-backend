@@ -14,5 +14,7 @@ public class FlightInsuranceAdminAirportModel {
     private String name;
     private String iataCode;
     private String icaoCode;
+    private String timezone;
+    private String countryCode;
     private boolean supportedForFlightInsurance;
 }

@@ -1,5 +1,6 @@
 package com.insureth.auth.model.dto;
 
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,4 +16,6 @@ public class BackofficeUserModel {
     private String email;
     private String walletAddress;
     private String role;
+    private List<String> roles;
+    private List<String> rights;
 }

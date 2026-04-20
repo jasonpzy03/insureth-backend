@@ -13,3 +13,10 @@ include(
     "insurance:insurance-domain",
     "insurance:insurance-model"
 )
+
+include(
+    "notification:notification-ws",
+    "notification:notification-service",
+    "notification:notification-domain",
+    "notification:notification-model"
+)

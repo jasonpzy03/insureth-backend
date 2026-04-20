@@ -10,6 +10,8 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Objects;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
@@ -46,12 +48,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .getPayload();
 
             String subject = claims.getSubject();
-            String role = claims.get("role", String.class);
+            List<String> roles = claims.get("roles", List.class);
+            List<String> rights = claims.get("rights", List.class);
+            String legacyRole = claims.get("role", String.class);
 
             UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
                     subject,
                     null,
-                    List.of(new SimpleGrantedAuthority("ROLE_" + role))
+                    buildAuthorities(roles, rights, legacyRole)
             );
             authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
             SecurityContextHolder.getContext().setAuthentication(authentication);
@@ -60,5 +64,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private List<SimpleGrantedAuthority> buildAuthorities(List<String> roles, List<String> rights, String legacyRole) {
+        LinkedHashSet<String> values = new LinkedHashSet<>();
+
+        if (roles != null) {
+            roles.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(value -> !value.isBlank())
+                    .forEach(role -> values.add("ROLE_" + role));
+        }
+
+        if (rights != null) {
+            rights.stream()
+                    .filter(Objects::nonNull)
+                    .map(String::trim)
+                    .filter(value -> !value.isBlank())
+                    .forEach(values::add);
+        }
+
+        if (values.isEmpty() && legacyRole != null && !legacyRole.isBlank()) {
+            values.add("ROLE_" + legacyRole);
+        }
+
+        return values.stream()
+                .map(SimpleGrantedAuthority::new)
+                .toList();
     }
 }

@@ -15,6 +15,13 @@ import com.insureth.insurance.service.client.flightstats.FlightStatsApiFeign;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +38,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FlightInsuranceService {
     private static final String PRODUCT_CODE = "flight-delay-v1";
+    private static final DateTimeFormatter HH_MM_FORMATTER = DateTimeFormatter.ofPattern("H:mm");
+    private static final DateTimeFormatter AIRPORT_DISPLAY_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter AIRLABS_UTC_FORMATTER = new DateTimeFormatterBuilder()
+            .appendPattern("yyyy-MM-dd'T'HH:mm")
+            .optionalStart()
+            .appendPattern(":ss")
+            .optionalEnd()
+            .toFormatter();
 
     private final AirLabsApiFeign airLabsApiFeign;
     private final AviationStackApiFeign aviationStackApiFeign;
@@ -44,6 +59,15 @@ public class FlightInsuranceService {
                                                                String flightNumber,
                                                                String departureAirportIATACode,
                                                                LocalDate departureDate) {
+        if (!departureDate.isAfter(LocalDate.now())) {
+            return getTestingFlightScheduleFromDelays(
+                    airlineIATACode,
+                    flightNumber,
+                    departureAirportIATACode,
+                    departureDate
+            );
+        }
+
         FlightScheduleResponseModel flightScheduleResponseModel = new FlightScheduleResponseModel();
         List<AviationStackFlightScheduleDataModel> dataModelList = aviationStackApiFeign.getFlightFutureSchedule(
                 airlineIATACode,
@@ -57,16 +81,163 @@ public class FlightInsuranceService {
         AviationStackFlightScheduleDataModel dataModel = dataModelList.getFirst();
         AirportDetailModel arrivalAirportModel = dataModel.getArrival();
         AirportDetailModel departureAirportModel = dataModel.getDeparture();
+        Airport departureAirportEntity = Optional
+                .ofNullable(airportDAO.findFirstByIataCode(departureAirportModel.getIataCode().toUpperCase()))
+                .orElseThrow(() -> new IllegalArgumentException("Departure airport timezone is not configured"));
+        Airport arrivalAirportEntity = Optional
+                .ofNullable(airportDAO.findFirstByIataCode(arrivalAirportModel.getIataCode().toUpperCase()))
+                .orElseThrow(() -> new IllegalArgumentException("Arrival airport timezone is not configured"));
+
+        ZonedDateTime departureUtc = toUtcDateTime(
+                departureDate,
+                departureAirportModel.getScheduledTime(),
+                departureAirportEntity
+        );
+        ZonedDateTime arrivalUtc = toUtcDateTime(
+                departureDate,
+                arrivalAirportModel.getScheduledTime(),
+                arrivalAirportEntity
+        );
+
+        if (arrivalUtc.isBefore(departureUtc)) {
+            arrivalUtc = toUtcDateTime(
+                    departureDate.plusDays(1),
+                    arrivalAirportModel.getScheduledTime(),
+                    arrivalAirportEntity
+            );
+        }
 
         flightScheduleResponseModel.setFlightIATA(dataModel.getFlight().getIataNumber().toUpperCase());
-        flightScheduleResponseModel.setArrivalTime(arrivalAirportModel.getScheduledTime());
-        flightScheduleResponseModel.setDepartureTime(departureAirportModel.getScheduledTime());
+        flightScheduleResponseModel.setArrivalTime(toUtcInstantString(arrivalUtc));
+        flightScheduleResponseModel.setDepartureTime(toUtcInstantString(departureUtc));
+        flightScheduleResponseModel.setDepartureLocalTime(formatAirportLocalDateTime(departureDate, departureAirportModel.getScheduledTime()));
+        flightScheduleResponseModel.setArrivalLocalTime(
+                arrivalUtc.withZoneSameInstant(ZoneId.of(arrivalAirportEntity.getTimezone().trim()))
+                        .toLocalDateTime()
+                        .format(AIRPORT_DISPLAY_FORMATTER)
+        );
+        flightScheduleResponseModel.setDepartureTimezone(departureAirportEntity.getTimezone());
+        flightScheduleResponseModel.setArrivalTimezone(arrivalAirportEntity.getTimezone());
         flightScheduleResponseModel.setArrivalAirportIATA(arrivalAirportModel.getIataCode().toUpperCase());
         flightScheduleResponseModel.setDepartureAirportIATA(departureAirportModel.getIataCode().toUpperCase());
-        flightScheduleResponseModel.setDepartureAirportName(airportDAO.findFirstByIataCode(flightScheduleResponseModel.getDepartureAirportIATA()).getName());
-        flightScheduleResponseModel.setArrivalAirportName(airportDAO.findFirstByIataCode(flightScheduleResponseModel.getArrivalAirportIATA()).getName());
+        flightScheduleResponseModel.setDepartureAirportName(departureAirportEntity.getName());
+        flightScheduleResponseModel.setArrivalAirportName(arrivalAirportEntity.getName());
 
         return flightScheduleResponseModel;
+    }
+
+    private FlightScheduleResponseModel getTestingFlightScheduleFromDelays(String airlineIATACode,
+                                                                           String flightNumber,
+                                                                           String departureAirportIATACode,
+                                                                           LocalDate departureDate) {
+        String flightIata = (airlineIATACode + flightNumber).toUpperCase();
+        List<AirLabsScheduleModel> schedules = airLabsApiFeign.getDelays(
+                30,
+                "departures",
+                flightIata,
+                "flight_iata,dep_iata,arr_iata,dep_time,arr_time,dep_time_utc,arr_time_utc,dep_time_ts,arr_time_ts,status"
+        ).getResponse();
+
+        Airport departureAirport = Optional
+                .ofNullable(airportDAO.findFirstByIataCode(departureAirportIATACode.toUpperCase()))
+                .orElseThrow(() -> new IllegalArgumentException("Departure airport not found"));
+
+        AirLabsScheduleModel schedule = schedules.stream()
+                .filter(item -> item.getFlightIata() != null && flightIata.equalsIgnoreCase(item.getFlightIata()))
+                .filter(item -> item.getDepIata() != null && departureAirportIATACode.equalsIgnoreCase(item.getDepIata()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No delayed flight schedule found for this flight"));
+
+        Airport arrivalAirport = Optional
+                .ofNullable(airportDAO.findFirstByIataCode(schedule.getArrIata().toUpperCase()))
+                .orElseThrow(() -> new IllegalArgumentException("Arrival airport not found"));
+
+        FlightScheduleResponseModel flightScheduleResponseModel = new FlightScheduleResponseModel();
+        flightScheduleResponseModel.setFlightIATA(flightIata);
+        flightScheduleResponseModel.setDepartureAirportIATA(schedule.getDepIata().toUpperCase());
+        flightScheduleResponseModel.setArrivalAirportIATA(schedule.getArrIata().toUpperCase());
+        flightScheduleResponseModel.setDepartureAirportName(departureAirport.getName());
+        flightScheduleResponseModel.setArrivalAirportName(arrivalAirport.getName());
+        flightScheduleResponseModel.setDepartureTime(normalizeUtcInstantString(schedule.getDepTimeUtc(), "departure"));
+        flightScheduleResponseModel.setArrivalTime(normalizeUtcInstantString(schedule.getArrTimeUtc(), "arrival"));
+        flightScheduleResponseModel.setDepartureLocalTime(normalizeAirportLocalTime(schedule.getDepTime(), departureAirport, "departure"));
+        flightScheduleResponseModel.setArrivalLocalTime(normalizeAirportLocalTime(schedule.getArrTime(), arrivalAirport, "arrival"));
+        flightScheduleResponseModel.setDepartureTimezone(departureAirport.getTimezone());
+        flightScheduleResponseModel.setArrivalTimezone(arrivalAirport.getTimezone());
+
+        return flightScheduleResponseModel;
+    }
+
+    private ZonedDateTime toUtcDateTime(LocalDate flightDate, String airportLocalTime, Airport airport) {
+        if (airportLocalTime == null || airportLocalTime.isBlank()) {
+            throw new IllegalArgumentException("Flight schedule time is not available");
+        }
+
+        if (airport.getTimezone() == null || airport.getTimezone().isBlank()) {
+            throw new IllegalArgumentException(
+                    "Airport timezone is not configured for " + airport.getIataCode()
+            );
+        }
+
+        LocalTime localTime = LocalTime.parse(airportLocalTime.trim(), HH_MM_FORMATTER);
+        ZoneId airportZone = ZoneId.of(airport.getTimezone().trim());
+
+        return ZonedDateTime.of(LocalDateTime.of(flightDate, localTime), airportZone)
+                .withZoneSameInstant(ZoneId.of("UTC"));
+    }
+
+    private String normalizeUtcInstantString(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("AirLabs did not return a UTC " + fieldName + " time");
+        }
+
+        String normalized = value.trim().replace(" ", "T");
+
+        try {
+            return LocalDateTime.parse(normalized, AIRLABS_UTC_FORMATTER)
+                    .atZone(ZoneId.of("UTC"))
+                    .toInstant()
+                    .toString();
+        } catch (Exception ignored) {
+            try {
+                return OffsetDateTime.parse(normalized).toInstant().toString();
+            } catch (Exception exception) {
+                throw new IllegalArgumentException("AirLabs returned an invalid UTC " + fieldName + " time");
+            }
+        }
+    }
+
+    private String toUtcInstantString(ZonedDateTime value) {
+        return value.toInstant().toString();
+    }
+
+    private String formatAirportLocalDateTime(LocalDate flightDate, String airportLocalTime) {
+        if (airportLocalTime == null || airportLocalTime.isBlank()) {
+            throw new IllegalArgumentException("Flight schedule time is not available");
+        }
+
+        LocalTime localTime = LocalTime.parse(airportLocalTime.trim(), HH_MM_FORMATTER);
+        return LocalDateTime.of(flightDate, localTime).format(AIRPORT_DISPLAY_FORMATTER);
+    }
+
+    private String normalizeAirportLocalTime(String value, Airport airport, String fieldName) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("AirLabs did not return a local " + fieldName + " time");
+        }
+
+        if (airport.getTimezone() == null || airport.getTimezone().isBlank()) {
+            throw new IllegalArgumentException(
+                    "Airport timezone is not configured for " + airport.getIataCode()
+            );
+        }
+
+        try {
+            return LocalDateTime.parse(value.trim().replace(" ", "T"))
+                    .format(AIRPORT_DISPLAY_FORMATTER);
+        } catch (Exception ignored) {
+            String normalized = value.trim().replace("T", " ");
+            return normalized.length() >= 16 ? normalized.substring(0, 16) : normalized;
+        }
     }
 
 

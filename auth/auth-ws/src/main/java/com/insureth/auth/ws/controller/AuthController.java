@@ -1,6 +1,7 @@
 package com.insureth.auth.ws.controller;
 
 import com.insureth.auth.model.dto.ClientUserModel;
+import com.insureth.auth.model.dto.VerifySignupRequest;
 import com.insureth.auth.service.ClientPortalUserService;
 import com.insureth.auth.ws.api.CpUsersApi;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,19 @@ public class AuthController implements CpUsersApi {
     public ResponseEntity<Void> updateClientUser(String walletAddress, ClientUserModel userModel) {
         authenticationFacade.requireWalletMatch(walletAddress);
         clientPortalUserService.updateUser(walletAddress, userModel);
+        return ResponseEntity.ok().build();
+    }
+
+    @Override
+    public ResponseEntity<Void> initiateSignup(ClientUserModel userModel) {
+        authenticationFacade.requireWalletMatch(userModel.getWalletAddress());
+        clientPortalUserService.initiateSignup(userModel);
+        return ResponseEntity.ok().build();
+    }
+
+    @Override
+    public ResponseEntity<Void> verifySignup(VerifySignupRequest verifySignupRequest) {
+        clientPortalUserService.verifySignup(verifySignupRequest.getToken());
         return ResponseEntity.ok().build();
     }
 }

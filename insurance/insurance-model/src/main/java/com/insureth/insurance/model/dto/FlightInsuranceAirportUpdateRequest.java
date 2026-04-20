@@ -21,6 +21,8 @@ public class FlightInsuranceAirportUpdateRequest {
     @NotBlank
     private String icaoCode;
 
+    private String timezone;
+
     @NotNull
     private Boolean supportedForFlightInsurance;
 }

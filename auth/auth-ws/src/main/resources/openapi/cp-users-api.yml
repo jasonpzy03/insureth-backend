@@ -42,6 +42,37 @@ paths:
         "201":
           description: User created successfully
 
+  /cp-users/signup/initiate:
+    post:
+      summary: Initiates a client user signup
+      description: Initiates signup and sends email verification.
+      operationId: initiateSignup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientUserModel'
+      responses:
+        "200":
+          description: Verification email sent
+
+  /cp-users/signup/verify:
+    post:
+      summary: Verifies a signup token
+      description: Verifies a token and creates the user.
+      operationId: verifySignup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifySignupRequest'
+      responses:
+        "200":
+          description: User fully verified and created
+
+
   /cp-users/{walletAddress}:
     get:
       summary: Get a client user profile
@@ -102,4 +133,11 @@ components:
         email:
           type: string
           example: "email@gmail.com"
+    VerifySignupRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
 

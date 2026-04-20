@@ -28,6 +28,12 @@ public class Airport {
     @Column(name = "icao_code")
     private String icaoCode;
 
+    @Column(name = "timezone")
+    private String timezone;
+
+    @Column(name = "country_code")
+    private String countryCode;
+
     @Column(name = "supported_for_flight_insurance")
     private Boolean supportedForFlightInsurance;
 }

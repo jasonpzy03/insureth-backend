@@ -12,6 +12,7 @@ import com.insureth.auth.model.dto.ClientUserModel;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
@@ -97,7 +98,13 @@ public class ClientPortalAuthService {
 
         boolean profileComplete = clientPortalUserDAO.existsByUserWalletAddressIgnoreCase(request.getWalletAddress());
         Instant expiresAt = jwtService.getExpiryInstant();
-        String token = jwtService.generateToken(user.getWalletAddress(), "CLIENT_PORTAL", user.getUserId());
+        String token = jwtService.generateToken(
+                user.getWalletAddress(),
+                "CLIENT_PORTAL",
+                List.of("CLIENT_PORTAL"),
+                List.of(),
+                user.getUserId()
+        );
 
         authAuditTrailService.record(
                 "CLIENT_PORTAL_LOGIN_SUCCESS",

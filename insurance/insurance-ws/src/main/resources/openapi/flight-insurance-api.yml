@@ -180,6 +180,14 @@ components:
           type: string
         arrivalTime:
           type: string
+        departureLocalTime:
+          type: string
+        arrivalLocalTime:
+          type: string
+        departureTimezone:
+          type: string
+        arrivalTimezone:
+          type: string
 
     AirlineResponseModel:
       type: object
@@ -204,3 +212,7 @@ components:
           type: string
           example: "KUL"
           description: IATA airport code
+        timezone:
+          type: string
+          example: "Asia/Kuala_Lumpur"
+          description: IANA timezone for the airport

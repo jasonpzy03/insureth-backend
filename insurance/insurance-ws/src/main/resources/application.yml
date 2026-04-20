@@ -1,6 +1,10 @@
 spring:
   application:
     name: insurance
+  artemis:
+    broker-url: tcp://${ACTIVEMQ_HOST:localhost}:61616
+    user: ${ACTIVEMQ_USER:admin}
+    password: ${ACTIVEMQ_PASSWORD:admin}
 
   datasource:
     url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
@@ -41,6 +45,29 @@ aviationStack:
 flightstats:
   api:
     url: https://api.flightstats.com/flex/ratings/rest/v1/json
+
+auth:
+  api:
+    url: ${AUTH_API_URL:http://localhost:8081}
+
+internal:
+  api:
+    key: ${INTERNAL_API_KEY:insureth-internal-dev-key}
+
+app:
+  client-portal:
+    url: ${CLIENT_PORTAL_URL:http://localhost:4200}
+
+blockchain:
+  rpc-url: ${BLOCKCHAIN_RPC_URL:https://sepolia.infura.io/v3/d61c67d521c94cbb9fc3da4b765072f3}
+
+flight-insurance:
+  contract-address: ${FLIGHT_INSURANCE_CONTRACT_ADDRESS:0xCCf5FfDEC8Bf38F7390C13Dd21DA13F7e16Cf583}
+  notifications:
+    enabled: ${FLIGHT_INSURANCE_NOTIFICATIONS_ENABLED:true}
+    initial-delay-ms: ${FLIGHT_INSURANCE_NOTIFICATIONS_INITIAL_DELAY_MS:15000}
+    sync-interval-ms: ${FLIGHT_INSURANCE_NOTIFICATIONS_SYNC_INTERVAL_MS:60000}
+    sync-from-block: ${FLIGHT_INSURANCE_NOTIFICATIONS_SYNC_FROM_BLOCK:0}
 
 server:
   port: 8082

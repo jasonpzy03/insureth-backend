@@ -6,6 +6,7 @@ import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -24,11 +25,13 @@ public class JwtService {
         this.expirationMs = expirationMs;
     }
 
-    public String generateToken(String subject, String role, Long userId) {
+    public String generateToken(String subject, String primaryRole, List<String> roles, List<String> rights, Long userId) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(subject)
-                .claim("role", role)
+                .claim("role", primaryRole)
+                .claim("roles", roles)
+                .claim("rights", rights)
                 .claim("userId", userId)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusMillis(expirationMs)))

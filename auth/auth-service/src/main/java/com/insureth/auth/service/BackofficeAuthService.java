@@ -12,6 +12,7 @@ import com.insureth.auth.model.dto.BackofficeUserModel;
 import java.security.SecureRandom;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class BackofficeAuthService {
     private final BackofficeUserDAO backofficeUserDAO;
     private final AuthNonceDAO authNonceDAO;
     private final JwtService jwtService;
+    private final BackofficeAuthorizationService backofficeAuthorizationService;
     private final WalletSignatureVerifier walletSignatureVerifier;
     private final SiweMessageService siweMessageService;
     private final AuthAuditTrailService authAuditTrailService;
@@ -87,13 +89,17 @@ public class BackofficeAuthService {
         authNonce.setUsedAt(Instant.now());
         authNonceDAO.save(authNonce);
 
+        List<String> roles = backofficeAuthorizationService.resolveRoles(user);
+        List<String> rights = backofficeAuthorizationService.resolveRights(user);
+        String primaryRole = backofficeAuthorizationService.resolvePrimaryRole(user);
+
         Instant expiresAt = jwtService.getExpiryInstant();
-        String token = jwtService.generateToken(user.getUser().getWalletAddress(), user.getRole(), user.getUserId());
+        String token = jwtService.generateToken(user.getUser().getWalletAddress(), primaryRole, roles, rights, user.getUserId());
 
         authAuditTrailService.record(
                 "BACKOFFICE_LOGIN_SUCCESS",
                 user.getUser().getWalletAddress(),
-                user.getRole(),
+                primaryRole,
                 "BACKOFFICE_USER",
                 String.valueOf(user.getUserId()),
                 "Backoffice user logged in successfully",
@@ -108,6 +114,7 @@ public class BackofficeAuthService {
                 .build();
     }
 
+    @Transactional(readOnly = true)
     public BackofficeUserModel getCurrentUser(String walletAddress) {
         return toModel(findUser(walletAddress));
     }
@@ -129,12 +136,16 @@ public class BackofficeAuthService {
     }
 
     private BackofficeUserModel toModel(BackofficeUser user) {
+        List<String> roles = backofficeAuthorizationService.resolveRoles(user);
+        List<String> rights = backofficeAuthorizationService.resolveRights(user);
         return BackofficeUserModel.builder()
                 .userId(user.getUserId())
                 .username(user.getUsername())
                 .email(user.getEmail())
                 .walletAddress(user.getUser().getWalletAddress())
-                .role(user.getRole())
+                .role(backofficeAuthorizationService.resolvePrimaryRole(user))
+                .roles(roles)
+                .rights(rights)
                 .build();
     }
 
