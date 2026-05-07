@@ -26,7 +26,9 @@ services:
       ARTEMIS_PASSWORD: ${ACTIVEMQ_PASSWORD}
 
   auth-service:
-    build: ./auth/auth-ws
+    build:
+      context: .
+      dockerfile: ./auth/auth-ws/Dockerfile
     restart: unless-stopped
     env_file:
       - ./deploy/backend.env
@@ -37,7 +39,9 @@ services:
         condition: service_started
 
   insurance-service:
-    build: ./insurance/insurance-ws
+    build:
+      context: .
+      dockerfile: ./insurance/insurance-ws/Dockerfile
     restart: unless-stopped
     env_file:
       - ./deploy/backend.env
@@ -50,7 +54,9 @@ services:
         condition: service_started
 
   notification-service:
-    build: ./notification/notification-ws
+    build:
+      context: .
+      dockerfile: ./notification/notification-ws/Dockerfile
     restart: unless-stopped
     env_file:
       - ./deploy/backend.env
