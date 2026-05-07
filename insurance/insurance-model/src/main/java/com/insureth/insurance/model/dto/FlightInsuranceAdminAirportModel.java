@@ -1,0 +1,20 @@
+package com.insureth.insurance.model.dto;
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class FlightInsuranceAdminAirportModel {
+    private Long airportId;
+    private String name;
+    private String iataCode;
+    private String icaoCode;
+    private String timezone;
+    private String countryCode;
+    private boolean supportedForFlightInsurance;
+}

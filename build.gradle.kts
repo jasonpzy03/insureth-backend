@@ -28,14 +28,6 @@ subprojects {
         mavenCentral()
     }
 
-    dependencies {
-        testImplementation("org.springframework.boot:spring-boot-starter-batch-test")
-        testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
-        testImplementation("org.springframework.boot:spring-boot-starter-security-test")
-        testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
-        testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    }
-
     configure<DependencyManagementExtension> {
         imports {
             mavenBom("org.springframework.cloud:spring-cloud-dependencies:${rootProject.extra["springCloudVersion"]}")

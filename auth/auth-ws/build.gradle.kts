@@ -11,6 +11,7 @@ dependencies {
     implementation("org.springframework.cloud:spring-cloud-starter-openfeign")
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("io.swagger.core.v3:swagger-annotations:2.2.25")
+    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
 }
 
 openApiGenerate {

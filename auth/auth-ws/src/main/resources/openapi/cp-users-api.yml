@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
-  title: Insureth Auth API
-  description: Authentication and User management for Insureth
+  title: Insureth Client Portal Users API
+  description: Authentication and Client Portal User management for Insureth
   version: 1.0.0
 servers:
   - url: http://localhost:8081
@@ -42,6 +42,83 @@ paths:
         "201":
           description: User created successfully
 
+  /cp-users/signup/initiate:
+    post:
+      summary: Initiates a client user signup
+      description: Initiates signup and sends email verification.
+      operationId: initiateSignup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientUserModel'
+      responses:
+        "200":
+          description: Verification email sent
+
+  /cp-users/signup/verify:
+    post:
+      summary: Verifies a signup token
+      description: Verifies a token and creates the user.
+      operationId: verifySignup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifySignupRequest'
+      responses:
+        "200":
+          description: User fully verified and created
+
+
+  /cp-users/{walletAddress}:
+    get:
+      summary: Get a client user profile
+      description: Retrieves the user's profile details.
+      operationId: getClientUser
+      parameters:
+        - name: walletAddress
+          in: path
+          required: true
+          description: The 42-character Ethereum wallet address.
+          schema:
+            type: string
+            example: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
+      responses:
+        "200":
+          description: Retuns the user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientUserModel'
+        "404":
+          description: User not found
+    put:
+      summary: Update a client user profile
+      description: Updates the user's username and email.
+      operationId: updateClientUser
+      parameters:
+        - name: walletAddress
+          in: path
+          required: true
+          description: The 42-character Ethereum wallet address.
+          schema:
+            type: string
+            example: "0x71C7656EC7ab88b098defB751B7401B5f6d8976F"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientUserModel'
+      responses:
+        "200":
+          description: User updated successfully
+        "404":
+          description: User not found
+
 components:
   schemas:
     ClientUserModel:
@@ -56,4 +133,11 @@ components:
         email:
           type: string
           example: "email@gmail.com"
+    VerifySignupRequest:
+      type: object
+      required:
+        - token
+      properties:
+        token:
+          type: string
 

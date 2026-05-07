@@ -1,0 +1,85 @@
+spring:
+  application:
+    name: insurance
+  artemis:
+    broker-url: tcp://${ACTIVEMQ_HOST:localhost}:61616
+    user: ${ACTIVEMQ_USER:admin}
+    password: ${ACTIVEMQ_PASSWORD:admin}
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        naming:
+          physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+
+logging:
+  level:
+    org:
+      springframework:
+        web: DEBUG
+        security: DEBUG
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:VGhpcy1pcy1hLWRldi1vbmx5LWluc3VyZXRoLWJhY2tvZmZpY2Utand0LXNlY3JldC1rZXktMDE=}
+
+airlabs:
+  api:
+    url: https://airlabs.co/api/v9/
+    key: ${AIRLABS_API_KEY}
+
+aviationStack:
+  api:
+    url: https://api.aviationstack.com/v1/
+    key: ${AVIATIONSTACK_API_KEY}
+
+flightstats:
+  api:
+    url: https://api.flightstats.com/flex/ratings/rest/v1/json
+
+auth:
+  api:
+    url: ${AUTH_API_URL:http://localhost:8081}
+
+internal:
+  api:
+    key: ${INTERNAL_API_KEY:insureth-internal-dev-key}
+
+app:
+  client-portal:
+    url: ${CLIENT_PORTAL_URL:http://localhost:4200}
+
+blockchain:
+  rpc-url: ${BLOCKCHAIN_RPC_URL:https://sepolia.infura.io/v3/d61c67d521c94cbb9fc3da4b765072f3}
+
+flight-insurance:
+  contract-address: "0x5F3d4990Bc5690d07d9d6725f7F80A2D29654948"
+  nft:
+    enabled: true
+    pinata:
+      jwt: ${PINATA_JWT}
+    owner-private-key: ${FLIGHT_INSURANCE_NFT_OWNER_PRIVATE_KEY}
+    image-cid: bafybeia7fqaxrgfiid5b5vdomldi7qyrlahc4ghgnzqdkqe2x77g5jls6y
+    image-mime-type: image/png
+    collection-name: Insureth Flight Policy
+    policy-base-url: ${FLIGHT_INSURANCE_NFT_POLICY_BASE_URL:${app.client-portal.url}}
+    gas-limit: ${FLIGHT_INSURANCE_NFT_GAS_LIMIT:350000}
+    receipt-timeout-ms: ${FLIGHT_INSURANCE_NFT_RECEIPT_TIMEOUT_MS:120000}
+    receipt-poll-interval-ms: ${FLIGHT_INSURANCE_NFT_RECEIPT_POLL_INTERVAL_MS:3000}
+  notifications:
+    enabled: ${FLIGHT_INSURANCE_NOTIFICATIONS_ENABLED:true}
+    initial-delay-ms: ${FLIGHT_INSURANCE_NOTIFICATIONS_INITIAL_DELAY_MS:15000}
+    sync-interval-ms: ${FLIGHT_INSURANCE_NOTIFICATIONS_SYNC_INTERVAL_MS:60000}
+    sync-from-block: ${FLIGHT_INSURANCE_NOTIFICATIONS_SYNC_FROM_BLOCK:0}
+
+server:
+  port: 8082
