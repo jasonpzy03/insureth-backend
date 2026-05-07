@@ -6,6 +6,7 @@ import com.insureth.insurance.domain.entity.FlightInsuranceNotificationSyncState
 import com.insureth.insurance.domain.repository.AirportDAO;
 import com.insureth.insurance.domain.repository.FlightInsuranceNotificationRecordDAO;
 import com.insureth.insurance.domain.repository.FlightInsuranceNotificationSyncStateDAO;
+import com.insureth.insurance.model.dto.PolicyPurchaseConfirmationRequest;
 import com.insureth.insurance.model.dto.PolicyResolutionNotificationRequest;
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -15,7 +16,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -41,12 +42,12 @@ import org.web3j.protocol.Web3j;
 import org.web3j.protocol.core.BatchRequest;
 import org.web3j.protocol.core.BatchResponse;
 import org.web3j.protocol.core.DefaultBlockParameter;
-import org.web3j.protocol.core.Response;
 import org.web3j.protocol.core.methods.request.EthFilter;
 import org.web3j.protocol.core.methods.response.EthBlock;
 import org.web3j.protocol.core.methods.response.EthLog;
 import org.web3j.protocol.core.methods.response.Log;
 import org.web3j.protocol.exceptions.ClientConnectionException;
+import org.web3j.utils.Numeric;
 
 @Service
 @RequiredArgsConstructor
@@ -54,12 +55,13 @@ import org.web3j.protocol.exceptions.ClientConnectionException;
 public class FlightInsuranceNotificationSyncService {
 
     private static final String SYNC_KEY = "CLIENT_PORTAL_NOTIFICATIONS";
-    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.ENGLISH);
-    private static final BigDecimal WEI_DIVISOR = new BigDecimal("1000000000000000000");
+    private static final DateTimeFormatter DATE_TIME_FORMATTER =
+            DateTimeFormatter.ofPattern("dd MMM yyyy, HH:mm", Locale.ENGLISH);
 
     private enum FlightStatus {
         Unknown, OnTime, Delayed, Cancelled
     }
+
     private static final String TYPE_POLICY_PURCHASED = "POLICY_PURCHASED";
     private static final String TYPE_PAYOUT_DISTRIBUTED = "PAYOUT_DISTRIBUTED";
     private static final String TYPE_FLIGHT_RESOLVED = "FLIGHT_RESOLVED";
@@ -79,6 +81,7 @@ public class FlightInsuranceNotificationSyncService {
                     new TypeReference<Uint256>() {}
             )
     );
+
     private static final Event AUTO_PAYOUT_TRIGGERED_EVENT = new Event(
             "AutoPayoutTriggered",
             List.of(
@@ -87,6 +90,7 @@ public class FlightInsuranceNotificationSyncService {
                     new TypeReference<Uint256>() {}
             )
     );
+
     private static final Event FLIGHT_STATUS_RESOLVED_EVENT = new Event(
             "FlightStatusResolved",
             List.of(
@@ -95,6 +99,7 @@ public class FlightInsuranceNotificationSyncService {
                     new TypeReference<Uint256>() {}
             )
     );
+
     private static final Event LIQUIDITY_PROVIDED_EVENT = new Event(
             "LiquidityProvided",
             List.of(
@@ -103,6 +108,7 @@ public class FlightInsuranceNotificationSyncService {
                     new TypeReference<Uint256>() {}
             )
     );
+
     private static final Event LIQUIDITY_WITHDRAWN_EVENT = new Event(
             "LiquidityWithdrawn",
             List.of(
@@ -116,6 +122,7 @@ public class FlightInsuranceNotificationSyncService {
     private final FlightInsuranceNotificationRecordDAO flightInsuranceNotificationRecordDAO;
     private final FlightInsuranceNotificationSyncStateDAO flightInsuranceNotificationSyncStateDAO;
     private final FlightInsuranceNotificationService flightInsuranceNotificationService;
+    private final FlightInsurancePolicyNftMetadataService flightInsurancePolicyNftMetadataService;
     private final AirportDAO airportDAO;
 
     @Value("${flight-insurance.contract-address:}")
@@ -152,23 +159,32 @@ public class FlightInsuranceNotificationSyncService {
                 return;
             }
 
-            // Consolidate all events into a single log fetching call
             EthFilter filter = new EthFilter(
                     DefaultBlockParameter.valueOf(BigInteger.valueOf(fromBlock)),
                     DefaultBlockParameter.valueOf(latestBlock),
-                    contractAddress
-            );
-            filter.addOptionalTopics(
-                    EventEncoder.encode(POLICY_PURCHASED_EVENT),
-                    EventEncoder.encode(AUTO_PAYOUT_TRIGGERED_EVENT),
-                    EventEncoder.encode(FLIGHT_STATUS_RESOLVED_EVENT),
-                    EventEncoder.encode(LIQUIDITY_PROVIDED_EVENT),
-                    EventEncoder.encode(LIQUIDITY_WITHDRAWN_EVENT)
+                    normalizeContractAddress(contractAddress)
             );
 
             EthLog response = web3j.ethGetLogs(filter).send();
+            if (response.hasError()) {
+                log.warn(
+                        "Skipping flight insurance notification sync because eth_getLogs returned an error: code={}, message={}",
+                        response.getError().getCode(),
+                        response.getError().getMessage()
+                );
+                return;
+            }
+
+            if (response.getLogs() == null) {
+                log.warn("Skipping flight insurance notification sync because eth_getLogs returned no logs payload.");
+                return;
+            }
+
+            Set<String> trackedTopics = trackedTopics();
             List<Log> logs = response.getLogs().stream()
-                    .map(l -> (Log) l.get())
+                    .map(logResult -> (Log) logResult.get())
+                    .filter(logEntry -> logEntry.getTopics() != null && !logEntry.getTopics().isEmpty())
+                    .filter(logEntry -> trackedTopics.contains(hexTopic(logEntry.getTopics().get(0))))
                     .collect(Collectors.toList());
 
             if (logs.isEmpty()) {
@@ -176,18 +192,14 @@ public class FlightInsuranceNotificationSyncService {
                 return;
             }
 
-            // Pre-fetch all required block timestamps in a single batch
             Map<String, Instant> blockTimestampCache = fetchBlockTimestampsBatch(logs);
-
-            // Process all logs
             processLogs(logs, blockTimestampCache);
-
             saveSyncState(latestBlock.longValue());
-        } catch (ClientConnectionException e) {
-            if (e.getMessage().contains("429")) {
+        } catch (ClientConnectionException exception) {
+            if (exception.getMessage() != null && exception.getMessage().contains("429")) {
                 log.warn("Rate limit (429) hit during blockchain sync. Will retry in the next cycle. Consider increasing sync-interval-ms.");
             } else {
-                log.error("Network error during blockchain sync", e);
+                log.error("Network error during blockchain sync", exception);
             }
         } catch (Exception exception) {
             log.error("Failed to sync flight insurance notifications from chain", exception);
@@ -199,11 +211,9 @@ public class FlightInsuranceNotificationSyncService {
                 .map(Log::getBlockHash)
                 .collect(Collectors.toSet());
 
-        log.debug("Batch fetching {} unique blocks for timestamps", blockHashes.size());
-        
         BatchRequest batch = web3j.newBatch();
         Map<String, org.web3j.protocol.core.Request<?, EthBlock>> requestMap = new HashMap<>();
-        
+
         for (String hash : blockHashes) {
             org.web3j.protocol.core.Request<?, EthBlock> request = web3j.ethGetBlockByHash(hash, false);
             requestMap.put(hash, request);
@@ -215,11 +225,11 @@ public class FlightInsuranceNotificationSyncService {
 
         for (Map.Entry<String, org.web3j.protocol.core.Request<?, EthBlock>> entry : requestMap.entrySet()) {
             EthBlock blockResponse = batchResponse.getResponses().stream()
-                    .filter(r -> r.getId() == entry.getValue().getId())
-                    .map(r -> (EthBlock) r)
+                    .filter(response -> response.getId() == entry.getValue().getId())
+                    .map(response -> (EthBlock) response)
                     .findFirst()
                     .orElse(null);
-            
+
             if (blockResponse != null && blockResponse.getBlock() != null) {
                 Instant timestamp = Instant.ofEpochSecond(blockResponse.getBlock().getTimestamp().longValueExact());
                 timestampCache.put(entry.getKey(), timestamp);
@@ -230,14 +240,14 @@ public class FlightInsuranceNotificationSyncService {
     }
 
     private void processLogs(List<Log> logs, Map<String, Instant> blockTimestampCache) throws IOException {
-        String policyPurchasedTopic = EventEncoder.encode(POLICY_PURCHASED_EVENT);
-        String autoPayoutTopic = EventEncoder.encode(AUTO_PAYOUT_TRIGGERED_EVENT);
-        String flightResolvedTopic = EventEncoder.encode(FLIGHT_STATUS_RESOLVED_EVENT);
-        String liquidityTopic = EventEncoder.encode(LIQUIDITY_PROVIDED_EVENT);
-        String withdrawalTopic = EventEncoder.encode(LIQUIDITY_WITHDRAWN_EVENT);
+        String policyPurchasedTopic = hexTopic(EventEncoder.encode(POLICY_PURCHASED_EVENT));
+        String autoPayoutTopic = hexTopic(EventEncoder.encode(AUTO_PAYOUT_TRIGGERED_EVENT));
+        String flightResolvedTopic = hexTopic(EventEncoder.encode(FLIGHT_STATUS_RESOLVED_EVENT));
+        String liquidityTopic = hexTopic(EventEncoder.encode(LIQUIDITY_PROVIDED_EVENT));
+        String withdrawalTopic = hexTopic(EventEncoder.encode(LIQUIDITY_WITHDRAWN_EVENT));
 
         for (Log logEntry : logs) {
-            String topic0 = logEntry.getTopics().get(0);
+            String topic0 = hexTopic(logEntry.getTopics().get(0));
 
             if (topic0.equals(policyPurchasedTopic)) {
                 handlePolicyPurchasedLog(logEntry, blockTimestampCache);
@@ -253,8 +263,7 @@ public class FlightInsuranceNotificationSyncService {
         }
     }
 
-    private void handlePolicyPurchasedLog(Log logEntry, Map<String, Instant> blockTimestampCache)
-            throws IOException {
+    private void handlePolicyPurchasedLog(Log logEntry, Map<String, Instant> blockTimestampCache) throws IOException {
         String eventKey = buildEventKey(TYPE_POLICY_PURCHASED, logEntry);
         if (flightInsuranceNotificationRecordDAO.findByEventKey(eventKey).isPresent()) {
             return;
@@ -298,38 +307,52 @@ public class FlightInsuranceNotificationSyncService {
                 .createdAt(Instant.now())
                 .build());
 
-        // Trigger Email (Polled from blockchain)
         try {
-            // Resolve airport names from DB
+            flightInsurancePolicyNftMetadataService.syncPolicyMetadata(
+                    policyId,
+                    holder,
+                    riskKey,
+                    flightNumber,
+                    origin,
+                    destination,
+                    departureTime,
+                    premiumWei
+            );
+        } catch (Exception exception) {
+            log.error("Failed to sync NFT metadata for policy={}", policyId, exception);
+        }
+
+        try {
             String departureAirportName = resolveAirportName(origin);
             String arrivalAirportName = resolveAirportName(destination);
-
-            // Compute fee breakdown from gross premium
             BigDecimal grossWei = new BigDecimal(premiumWei);
-            BigDecimal feeWei = grossWei.multiply(BigDecimal.valueOf(platformFeePercentage)).divide(BigDecimal.valueOf(100), 0, RoundingMode.DOWN);
+            BigDecimal feeWei = grossWei.multiply(BigDecimal.valueOf(platformFeePercentage))
+                    .divide(BigDecimal.valueOf(100), 0, RoundingMode.DOWN);
             BigDecimal netWei = grossWei.subtract(feeWei);
 
-            flightInsuranceNotificationService.queuePolicyPurchaseConfirmation(holder, com.insureth.insurance.model.dto.PolicyPurchaseConfirmationRequest.builder()
-                    .policyId(String.valueOf(policyId))
-                    .flightNumber(flightNumber)
-                    .departureAirportIata(origin)
-                    .arrivalAirportIata(destination)
-                    .departureAirportName(departureAirportName)
-                    .arrivalAirportName(arrivalAirportName)
-                    .departureTime(Instant.ofEpochSecond(departureTime).toString())
-                    .premiumPaidEth(formatWeiToEth(grossWei.toBigInteger().toString()))
-                    .netPremiumEth(formatWeiToEth(netWei.toBigInteger().toString()))
-                    .platformFeeEth(formatWeiToEth(feeWei.toBigInteger().toString()))
-                    .currency("ETH")
-                    .transactionHash(logEntry.getTransactionHash())
-                    .build());
-        } catch (Exception e) {
-            log.error("Failed to queue purchase email for policy={}", policyId, e);
+            flightInsuranceNotificationService.queuePolicyPurchaseConfirmation(
+                    holder,
+                    PolicyPurchaseConfirmationRequest.builder()
+                            .policyId(String.valueOf(policyId))
+                            .flightNumber(flightNumber)
+                            .departureAirportIata(origin)
+                            .arrivalAirportIata(destination)
+                            .departureAirportName(departureAirportName)
+                            .arrivalAirportName(arrivalAirportName)
+                            .departureTime(Instant.ofEpochSecond(departureTime).toString())
+                            .premiumPaidEth(formatWeiToEth(grossWei.toBigInteger().toString()))
+                            .netPremiumEth(formatWeiToEth(netWei.toBigInteger().toString()))
+                            .platformFeeEth(formatWeiToEth(feeWei.toBigInteger().toString()))
+                            .currency("ETH")
+                            .transactionHash(logEntry.getTransactionHash())
+                            .build()
+            );
+        } catch (Exception exception) {
+            log.error("Failed to queue purchase email for policy={}", policyId, exception);
         }
     }
 
-    private void handleAutoPayoutLog(Log logEntry, Map<String, Instant> blockTimestampCache)
-            throws IOException {
+    private void handleAutoPayoutLog(Log logEntry, Map<String, Instant> blockTimestampCache) throws IOException {
         String eventKey = buildEventKey(TYPE_PAYOUT_DISTRIBUTED, logEntry);
         if (flightInsuranceNotificationRecordDAO.findByEventKey(eventKey).isPresent()) {
             return;
@@ -375,11 +398,11 @@ public class FlightInsuranceNotificationSyncService {
                 .createdAt(Instant.now())
                 .build());
 
-        // Trigger Claim Paid Email
         try {
             String payoutEth = formatWeiToEth(payoutWei);
             String departureAirportName = resolveAirportName(origin);
             String arrivalAirportName = resolveAirportName(destination);
+
             flightInsuranceNotificationService.queuePolicyResolution(
                     holder,
                     PolicyResolutionNotificationRequest.builder()
@@ -397,13 +420,12 @@ public class FlightInsuranceNotificationSyncService {
                             .hasPayout(true)
                             .build()
             );
-        } catch (Exception e) {
-            log.error("Failed to queue claim paid email for policy={}", policyId, e);
+        } catch (Exception exception) {
+            log.error("Failed to queue claim paid email for policy={}", policyId, exception);
         }
     }
 
-    private void handleFlightStatusResolvedLog(Log logEntry, Map<String, Instant> blockTimestampCache)
-            throws IOException {
+    private void handleFlightStatusResolvedLog(Log logEntry, Map<String, Instant> blockTimestampCache) throws IOException {
         String eventKey = buildEventKey(TYPE_FLIGHT_RESOLVED, logEntry);
         if (flightInsuranceNotificationRecordDAO.findByEventKey(eventKey).isPresent()) {
             return;
@@ -420,10 +442,11 @@ public class FlightInsuranceNotificationSyncService {
         );
         int statusInt = ((Uint256) values.get(0)).getValue().intValue();
         int delayMinutes = ((Uint256) values.get(1)).getValue().intValue();
-        FlightStatus status = statusInt < FlightStatus.values().length ? FlightStatus.values()[statusInt] : FlightStatus.Unknown;
+        FlightStatus status = statusInt < FlightStatus.values().length
+                ? FlightStatus.values()[statusInt]
+                : FlightStatus.Unknown;
         Instant eventTimestamp = blockTimestampCache.getOrDefault(logEntry.getBlockHash(), Instant.now());
 
-        // Record this resolution (for the risk context)
         flightInsuranceNotificationRecordDAO.save(FlightInsuranceNotificationRecord.builder()
                 .eventKey(eventKey)
                 .riskKey(riskKey)
@@ -439,15 +462,14 @@ public class FlightInsuranceNotificationSyncService {
                 .holder("0x0")
                 .build());
 
-        // Find all related policies and send emails
-        List<FlightInsuranceNotificationRecord> purchaseRecords = flightInsuranceNotificationRecordDAO.findByRiskKeyAndType(riskKey, TYPE_POLICY_PURCHASED);
+        List<FlightInsuranceNotificationRecord> purchaseRecords =
+                flightInsuranceNotificationRecordDAO.findByRiskKeyAndType(riskKey, TYPE_POLICY_PURCHASED);
         for (FlightInsuranceNotificationRecord purchase : purchaseRecords) {
             triggerResolutionEmail(purchase, status, delayMinutes, logEntry.getTransactionHash(), eventTimestamp);
         }
     }
 
-    private void handleLiquidityProvidedLog(Log logEntry, Map<String, Instant> blockTimestampCache)
-            throws IOException {
+    private void handleLiquidityProvidedLog(Log logEntry, Map<String, Instant> blockTimestampCache) throws IOException {
         String eventKey = buildEventKey(TYPE_LIQUIDITY_PROVIDED, logEntry);
         if (flightInsuranceNotificationRecordDAO.findByEventKey(eventKey).isPresent()) {
             return;
@@ -481,7 +503,6 @@ public class FlightInsuranceNotificationSyncService {
                 .policyId(0L)
                 .build());
 
-        // Trigger Email
         try {
             flightInsuranceNotificationService.queueInvestmentConfirmation(
                     investor,
@@ -490,53 +511,12 @@ public class FlightInsuranceNotificationSyncService {
                     logEntry.getTransactionHash(),
                     eventTimestamp
             );
-        } catch (Exception e) {
-            log.error("Failed to queue investment email for wallet={}", investor, e);
+        } catch (Exception exception) {
+            log.error("Failed to queue investment email for wallet={}", investor, exception);
         }
     }
 
-    private void triggerResolutionEmail(
-            FlightInsuranceNotificationRecord purchase,
-            FlightStatus status,
-            int delayMinutes,
-            String transactionHash,
-            Instant resolutionTime
-    ) {
-        // Find if there was a payout for this policy
-        Optional<FlightInsuranceNotificationRecord> payoutRecord = flightInsuranceNotificationRecordDAO
-                .findFirstByPolicyIdAndTypeOrderByEventTimestampDescCreatedAtDesc(purchase.getPolicyId(), TYPE_PAYOUT_DISTRIBUTED);
-
-        boolean hasPayout = payoutRecord.isPresent();
-        String payoutEth = formatWeiToEth(payoutRecord.map(FlightInsuranceNotificationRecord::getAmountWei).orElse("0"));
-        String departureAirportName = resolveAirportName(purchase.getOrigin());
-        String arrivalAirportName = resolveAirportName(purchase.getDestination());
-
-        try {
-            flightInsuranceNotificationService.queuePolicyResolution(
-                    purchase.getHolder(),
-                    PolicyResolutionNotificationRequest.builder()
-                            .policyId(String.valueOf(purchase.getPolicyId()))
-                            .flightNumber(purchase.getFlightNumber())
-                            .origin(purchase.getOrigin())
-                            .destination(purchase.getDestination())
-                            .departureAirportName(departureAirportName)
-                            .arrivalAirportName(arrivalAirportName)
-                            .status(status.name())
-                            .delayMinutes(String.valueOf(delayMinutes))
-                            .payoutEth(payoutEth)
-                            .resolutionTime(DATE_TIME_FORMATTER.withZone(ZoneId.systemDefault()).format(resolutionTime))
-                            .transactionHash(transactionHash)
-                            .hasPayout(hasPayout)
-                            .build()
-            );
-        } catch (Exception e) {
-            log.error("Failed to queue resolution email for policy={}", purchase.getPolicyId(), e);
-        }
-    }
-
-
-    private void handleLiquidityWithdrawnLog(Log logEntry, Map<String, Instant> blockTimestampCache)
-            throws IOException {
+    private void handleLiquidityWithdrawnLog(Log logEntry, Map<String, Instant> blockTimestampCache) throws IOException {
         String eventKey = buildEventKey(TYPE_LIQUIDITY_WITHDRAWN, logEntry);
         if (flightInsuranceNotificationRecordDAO.findByEventKey(eventKey).isPresent()) {
             return;
@@ -570,7 +550,6 @@ public class FlightInsuranceNotificationSyncService {
                 .policyId(0L)
                 .build());
 
-        // Trigger Email
         try {
             flightInsuranceNotificationService.queueWithdrawalConfirmation(
                     investor,
@@ -579,8 +558,49 @@ public class FlightInsuranceNotificationSyncService {
                     logEntry.getTransactionHash(),
                     eventTimestamp
             );
-        } catch (Exception e) {
-            log.error("Failed to queue withdrawal email for wallet={}", investor, e);
+        } catch (Exception exception) {
+            log.error("Failed to queue withdrawal email for wallet={}", investor, exception);
+        }
+    }
+
+    private void triggerResolutionEmail(
+            FlightInsuranceNotificationRecord purchase,
+            FlightStatus status,
+            int delayMinutes,
+            String transactionHash,
+            Instant resolutionTime
+    ) {
+        Optional<FlightInsuranceNotificationRecord> payoutRecord = flightInsuranceNotificationRecordDAO
+                .findFirstByPolicyIdAndTypeOrderByEventTimestampDescCreatedAtDesc(
+                        purchase.getPolicyId(),
+                        TYPE_PAYOUT_DISTRIBUTED
+                );
+
+        boolean hasPayout = payoutRecord.isPresent();
+        String payoutEth = formatWeiToEth(payoutRecord.map(FlightInsuranceNotificationRecord::getAmountWei).orElse("0"));
+        String departureAirportName = resolveAirportName(purchase.getOrigin());
+        String arrivalAirportName = resolveAirportName(purchase.getDestination());
+
+        try {
+            flightInsuranceNotificationService.queuePolicyResolution(
+                    purchase.getHolder(),
+                    PolicyResolutionNotificationRequest.builder()
+                            .policyId(String.valueOf(purchase.getPolicyId()))
+                            .flightNumber(purchase.getFlightNumber())
+                            .origin(purchase.getOrigin())
+                            .destination(purchase.getDestination())
+                            .departureAirportName(departureAirportName)
+                            .arrivalAirportName(arrivalAirportName)
+                            .status(status.name())
+                            .delayMinutes(String.valueOf(delayMinutes))
+                            .payoutEth(payoutEth)
+                            .resolutionTime(DATE_TIME_FORMATTER.withZone(ZoneId.systemDefault()).format(resolutionTime))
+                            .transactionHash(transactionHash)
+                            .hasPayout(hasPayout)
+                            .build()
+            );
+        } catch (Exception exception) {
+            log.error("Failed to queue resolution email for policy={}", purchase.getPolicyId(), exception);
         }
     }
 
@@ -610,7 +630,6 @@ public class FlightInsuranceNotificationSyncService {
                 .build());
     }
 
-
     private String buildEventKey(String eventType, Log logEntry) {
         return eventType + ":" + logEntry.getTransactionHash() + ":" + logEntry.getLogIndex();
     }
@@ -625,7 +644,25 @@ public class FlightInsuranceNotificationSyncService {
     }
 
     private String stripHexPrefix(String value) {
-        return value.startsWith("0x") ? value.substring(2) : value;
+        return value != null && value.startsWith("0x") ? value.substring(2) : value;
+    }
+
+    private String hexTopic(String topic) {
+        return Numeric.prependHexPrefix(stripHexPrefix(topic));
+    }
+
+    private String normalizeContractAddress(String address) {
+        return Numeric.prependHexPrefix(stripHexPrefix(address == null ? "" : address.trim()));
+    }
+
+    private Set<String> trackedTopics() {
+        return new LinkedHashSet<>(List.of(
+                hexTopic(EventEncoder.encode(POLICY_PURCHASED_EVENT)),
+                hexTopic(EventEncoder.encode(AUTO_PAYOUT_TRIGGERED_EVENT)),
+                hexTopic(EventEncoder.encode(FLIGHT_STATUS_RESOLVED_EVENT)),
+                hexTopic(EventEncoder.encode(LIQUIDITY_PROVIDED_EVENT)),
+                hexTopic(EventEncoder.encode(LIQUIDITY_WITHDRAWN_EVENT))
+        ));
     }
 
     private String buildPayoutMessage(Long policyId, String flightNumber, String origin, String destination) {
@@ -640,14 +677,16 @@ public class FlightInsuranceNotificationSyncService {
         if (iataCode == null || iataCode.isBlank()) {
             return iataCode;
         }
+
         try {
             Airport airport = airportDAO.findFirstByIataCode(iataCode.toUpperCase(Locale.ROOT));
             if (airport != null && airport.getName() != null && !airport.getName().isBlank()) {
                 return airport.getName();
             }
-        } catch (Exception e) {
+        } catch (Exception exception) {
             log.warn("Failed to resolve airport name for IATA code: {}", iataCode);
         }
+
         return iataCode;
     }
 }
