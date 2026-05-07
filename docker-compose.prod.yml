@@ -67,6 +67,7 @@ services:
         condition: service_started
 
   gateway-service:
+    image: insureth-frontend-gateway-service:latest
     build: ../insureth-frontend/gateway
     restart: unless-stopped
     env_file:
