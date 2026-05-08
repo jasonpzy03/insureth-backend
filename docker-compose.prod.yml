@@ -9,9 +9,7 @@ services:
       ARTEMIS_PASSWORD: ${ACTIVEMQ_PASSWORD}
 
   auth-service:
-    build:
-      context: .
-      dockerfile: ./auth/auth-ws/Dockerfile
+    image: 329350276565.dkr.ecr.ap-southeast-1.amazonaws.com/insureth-auth-service:latest
     restart: unless-stopped
     env_file:
       - ./deploy/backend.env
@@ -20,9 +18,7 @@ services:
         condition: service_started
 
   insurance-service:
-    build:
-      context: .
-      dockerfile: ./insurance/insurance-ws/Dockerfile
+    image: 329350276565.dkr.ecr.ap-southeast-1.amazonaws.com/insureth-insurance-service:latest
     restart: unless-stopped
     env_file:
       - ./deploy/backend.env
@@ -33,9 +29,7 @@ services:
         condition: service_started
 
   notification-service:
-    build:
-      context: .
-      dockerfile: ./notification/notification-ws/Dockerfile
+    image: 329350276565.dkr.ecr.ap-southeast-1.amazonaws.com/insureth-notification-service:latest
     restart: unless-stopped
     env_file:
       - ./deploy/backend.env
@@ -44,8 +38,7 @@ services:
         condition: service_started
 
   gateway-service:
-    image: insureth-frontend-gateway-service:latest
-    build: ../insureth-frontend/gateway
+    image: 329350276565.dkr.ecr.ap-southeast-1.amazonaws.com/insureth-gateway-service:latest
     restart: unless-stopped
     env_file:
       - ./deploy/backend.env
