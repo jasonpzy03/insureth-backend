@@ -1,21 +1,4 @@
 services:
-  postgres:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    env_file:
-      - ./deploy/backend.env
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   activemq:
     image: apache/activemq-artemis:latest
     restart: unless-stopped
@@ -33,8 +16,6 @@ services:
     env_file:
       - ./deploy/backend.env
     depends_on:
-      postgres:
-        condition: service_healthy
       activemq:
         condition: service_started
 
@@ -46,8 +27,6 @@ services:
     env_file:
       - ./deploy/backend.env
     depends_on:
-      postgres:
-        condition: service_healthy
       activemq:
         condition: service_started
       auth-service:
@@ -61,8 +40,6 @@ services:
     env_file:
       - ./deploy/backend.env
     depends_on:
-      postgres:
-        condition: service_healthy
       activemq:
         condition: service_started
 
@@ -79,6 +56,3 @@ services:
         condition: service_started
     ports:
       - "8080:8080"
-
-volumes:
-  postgres-data:
