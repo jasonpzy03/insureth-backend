@@ -12,7 +12,13 @@ import org.springframework.stereotype.Service;
 @Service
 public class BackofficeAuthorizationService {
 
-    private static final List<String> ROLE_PRIORITY = List.of("ADMIN", "USER_ADMIN", "OPERATOR", "REVIEWER");
+    private static final List<String> ROLE_PRIORITY = List.of(
+            "SUPER_ADMIN",
+            "USER_ADMIN",
+            "GOVERNANCE_MANAGER",
+            "OPERATOR",
+            "REVIEWER"
+    );
 
     public List<String> resolveRoles(BackofficeUser user) {
         return user.getUserRoles().stream()

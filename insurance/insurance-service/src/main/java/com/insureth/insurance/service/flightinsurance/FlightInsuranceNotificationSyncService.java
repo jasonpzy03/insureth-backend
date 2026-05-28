@@ -307,7 +307,10 @@ public class FlightInsuranceNotificationSyncService {
                 .createdAt(Instant.now())
                 .build());
 
+        log.info("About to sync NFT metadata for policy={}", policyId);
+
         try {
+            log.info("Entered syncPolicyMetadata for policy={}", policyId);
             flightInsurancePolicyNftMetadataService.syncPolicyMetadata(
                     policyId,
                     holder,
