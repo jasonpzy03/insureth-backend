@@ -45,6 +45,8 @@ aviationStack:
 flightstats:
   api:
     url: https://api.flightstats.com/flex/ratings/rest/v1/json
+    appId: ${FLIGHTSTATS_API_APPID}
+    appKey: ${FLIGHTSTATS_API_APPKEY}
 
 auth:
   api:
@@ -62,7 +64,7 @@ blockchain:
   rpc-url: ${BLOCKCHAIN_RPC_URL:https://sepolia.infura.io/v3/d61c67d521c94cbb9fc3da4b765072f3}
 
 flight-insurance:
-  contract-address: "0x5F3d4990Bc5690d07d9d6725f7F80A2D29654948"
+  contract-address: "0x77428CC9dC264c1e7C0C4b8b63D9DEbAa1575006"
   nft:
     enabled: true
     pinata:
@@ -80,6 +82,10 @@ flight-insurance:
     initial-delay-ms: ${FLIGHT_INSURANCE_NOTIFICATIONS_INITIAL_DELAY_MS:15000}
     sync-interval-ms: ${FLIGHT_INSURANCE_NOTIFICATIONS_SYNC_INTERVAL_MS:60000}
     sync-from-block: ${FLIGHT_INSURANCE_NOTIFICATIONS_SYNC_FROM_BLOCK:0}
+
+insurance-governance:
+  contract-address: ${INSURANCE_GOVERNANCE_CONTRACT_ADDRESS:0x5E7724B6a8eF4F33E35aD2A3A5DE3Ad5cF1e9173}
+  rpc-url: ${INSURANCE_GOVERNANCE_RPC_URL:https://eth-sepolia.g.alchemy.com/v2/7dyvwknbKpJgEWnjAwHJG}
 
 server:
   port: 8082

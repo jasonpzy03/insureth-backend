@@ -17,6 +17,10 @@ public interface BackofficeUserDAO extends JpaRepository<BackofficeUser, Long> {
     @EntityGraph(attributePaths = {"userRoles", "userRoles.role", "userRoles.role.roleRights", "user"})
     Optional<BackofficeUser> findByUserWalletAddressIgnoreCase(String walletAddress);
 
+    @Override
+    @EntityGraph(attributePaths = {"userRoles", "userRoles.role", "userRoles.role.roleRights", "user"})
+    Optional<BackofficeUser> findById(Long userId);
+
     boolean existsByUsernameIgnoreCase(String username);
     boolean existsByEmailIgnoreCase(String email);
     boolean existsByUserWalletAddressIgnoreCase(String walletAddress);
